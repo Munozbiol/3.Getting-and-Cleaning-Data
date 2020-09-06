@@ -14,70 +14,76 @@ urlfile <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%2
 download.file(urlfile, "dataFiles.zip")
 unzip("dataFiles.zip")
 
-#load the data
-setwd("C:/Users/Manuel/Google Drive/Data Science/Cursos Coursera/Data Science JHU/3 Data cleaning/4 week/Project/UCI HAR Dataset")
-activity_labels <- read.table("activity_labels.txt")
-features <- read.table("features.txt")
+# to set up the path to the directory that contains necessary files and folders "train", "test"
+general_path<-"C:/Users/Manuel/Google Drive/Data Science/Cursos Coursera/Data Science JHU/3 Data cleaning/4 week/Project/UCI HAR Dataset"
 
-#data test
-setwd("C:/Users/Manuel/Google Drive/Data Science/Cursos Coursera/Data Science JHU/3 Data cleaning/4 week/Project/UCI HAR Dataset/test")
-x_test <- read.table("X_test.txt")
-y_test  <- read.table("y_test.txt")
-subject_test <-read.table("subject_test.txt")
+#set up the path to the train directory
+train_path<-"C:/Users/Manuel/Google Drive/Data Science/Cursos Coursera/Data Science JHU/3 Data cleaning/4 week/Project/UCI HAR Dataset/train"
 
-#data training
-setwd("C:/Users/Manuel/Google Drive/Data Science/Cursos Coursera/Data Science JHU/3 Data cleaning/4 week/Project/UCI HAR Dataset/trian")
-x_train <- read.table("X_test.txt")
-y_train <- read.table("y_test.txt")
-subject_train<-read.table("subject_test.txt")
+#set up the path to the test directory
+test_path<-"C:/Users/Manuel/Google Drive/Data Science/Cursos Coursera/Data Science JHU/3 Data cleaning/4 week/Project/UCI HAR Dataset/test"
 
-#Merges the training and the test sets to create one data set.
-x_data <- rbind(x_test, x_train)
-y_data <- rbind(y_test, y_train)
-subject <- rbind(subject_test, subject_train)
-MergedData <- cbind(subject, x_data, y_data)
+# set up the path to the output directory
+output_path<-"C:/Users/Manuel/Google Drive/Data Science/Cursos Coursera/Data Science JHU/3 Data cleaning/4 week/Project/UCI HAR Dataset"
 
-#Extracts only the measurements on the mean and standard deviation for each measurement.
-features_data <- grep("mean\\(\\)|std\\(\\)", features)
+setwd(general_path)
 
-### Subset data columns only including "mean" and "std".
-data_mean_std <- x_data[,features_data]
+# Load: activity labels
+activity_names<-read.table("activity_labels.txt")[,2]
 
-### Subset variable name only including "mean" and "std".
-var <- features[features_data,]
+# Load: data column names
+features<-read.table("features.txt")[,2]
 
-names(var) <- c("ID", "Variable")
+# Load and process X_train & y_train data.
+setwd(train_path)
+X_train<-read.table("X_train.txt")
+y_train<-read.table("y_train.txt")
+subject_train<-read.table("subject_train.txt")
+names(X_train)<-features
 
-#Appropriately labels the data set with descriptive variable names.
+# Extract only the measurements on the mean and standard deviation for each measurement.
+extract_features<-grepl("mean|std", features)
+# Extract only the measurements on the mean and standard deviation for each measurement.
+X_train<-X_train[,extract_features]
 
-var <- var %>%
-        mutate(Variable = gsub("-mean\\(\\)","_mean", Variable),
-               Variable = gsub("-std\\(\\)","_std", Variable),
-               Variable = gsub("-","_", Variable),
-               Variable = gsub("^t","Time_", Variable),
-               Variable = gsub("^f","Frequency_", Variable),
-               Variable = gsub("BodyBody","Body", Variable))
+# Load activity labels
+y_train[,2]<-activity_names[y_train[,1]]
+# Add names to activities
+names(y_train)<-c("Activity_ID", "Activity_Label")
+names(subject_train)<-"subject"
 
-#Name columns
-names(data_mean_std) <- var[,2]
+# Bind all data into the targeted table of train data set
+train_data<-cbind(as.data.table(subject_train), y_train, X_train)
 
-# Rename appropriate column name.
-names(activity_labels) <- c("ID", "Activity")
-names(y_data)[1] <- "ID"
-names(subject)[1] <- "Subject_Id"
 
-#Replace with descriptive activity names.
-Activity <- y_data %>%
-        left_join(activity_labels, by = "ID") %>%
-        select(Activity)
+# to compile the test data we take all steps for test data set
+setwd(test_path)
+X_test<-read.table("X_test.txt")
+y_test<-read.table("y_test.txt")
+subject_test<-read.table("subject_test.txt")
+names(X_test)<-features
 
-# Create a complete dataset including subject, activity and records.  
-All_data <- cbind(subject,Activity,data_mean_std)
+extract_features<-grepl("mean|std", features)
+X_test <- X_test[,extract_features]
+y_test[,2]<-activity_names[y_test[,1]]
 
-#From the data set in step 4, creates a second, independent tidy data set with the average of each variable for each activity and each subject.
+names(y_test)<-c("Activity_ID", "Activity_Label")
+names(subject_test)<-"subject"
 
-tidy_data <- All_data %>%
-        group_by(Subject_Id, Activity) %>%
-        summarise_each(funs(mean))
+test_data<-cbind(as.data.table(subject_test), y_test, X_test)
 
-write.table(tidy_data, "tidy_data.txt", row.name = FALSE, sep="\t")
+
+# to merge all data (train_test)
+all_data<-rbind(train_data,test_data)
+id_names<-c("subject", "Activity_ID", "Activity_Label")
+data_labels<-setdiff(colnames(all_data), id_names)
+melt_all<-melt(all_data, id = id_names, measure.vars = data_labels)
+
+# to apply mean  to merged dataset using dcast function
+tidy_data<-dcast(melt_all, subject + Activity_Label ~ variable, mean)
+tidy_data<-cbind(tidy_data[,1:2],select(tidy_data,contains("mean")))
+
+
+# to set the path for the output file (subject+activity+mean_per_factor)
+setwd(output_path)
+write.table(tidy_data, file = "final_tidy_data.txt",row.name=FALSE)
